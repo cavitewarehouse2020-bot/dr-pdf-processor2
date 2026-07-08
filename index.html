@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="utf-8">
+
+<title>DR PDF Processor</title>
+
+3.11.174/pdf.min.js"></script>
+
+<style>
+
+body{
+    font-family:Arial;
+    padding:40px;
+}
+
+#dropZone{
+    height:250px;
+    border:3px dashed #0078d7;
+    border-radius:10px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    cursor:pointer;
+}
+
+#status{
+    margin-top:20px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h2>DR PDF Processor</h2>
+
+<div id="dropZone">
+    Drag PDF Here
+</div>
+
+<div id="status"></div>
+
+<script>
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const dropZone =
+document.getElementById('dropZone');
+
+const status =
+document.getElementById('status');
+
+dropZone.addEventListener('dragover', e=>{
+    e.preventDefault();
+});
+
+dropZone.addEventListener('drop', async e=>{
+
+    e.preventDefault();
+
+    const file =
+    e.dataTransfer.files[0];
+
+    if(!file) return;
+
+    status.innerHTML =
+    "Reading PDF...";
+
+    const buffer =
+    await file.arrayBuffer();
+
+    const pdf =
+    await pdfjsLib.getDocument({
+      data:buffer
+    }).promise;
+
+    let text = "";
+
+    for(let i=1;i<=pdf.numPages;i++){
+
+        const page =
+        await pdf.getPage(i);
+
+        const content =
+        await page.getTextContent();
+
+        text += content.items
+        .map(x=>x.str)
+        .join(" ");
+
+    }
+
+    const match =
+    text.match(/DR\s*No\.?\s*(\d+)/i);
+
+    if(!match){
+
+        status.innerHTML =
+        "❌ DR Number Not Found";
+
+        return;
+    }
+
+    const drNo = match[1];
+
+    const blob =
+    new Blob([buffer],{
+      type:"application/pdf"
+    });
+
+    const link =
+    document.createElement("a");
+
+    link.href =
+    URL.createObjectURL(blob);
+
+    link.download =
+    drNo + ".pdf";
+
+    link.click();
+
+    status.innerHTML =
+    "✅ Downloaded: " + drNo + ".pdf";
+
+});
+
+</script>
+
+</body>
+</html>
