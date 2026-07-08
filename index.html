@@ -1,24 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js
+    <meta charset="UTF-8">
+    <title>Library Test</title>
+
+    https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
 </head>
 <body>
 
-<h1>Tesseract Test</h1>
+<h1>Library Test</h1>
 
 <div id="result"></div>
 
 <script>
 
-if(typeof Tesseract === "undefined"){
-    document.getElementById("result").innerHTML =
-        "❌ Tesseract NOT Loaded";
-}
-else{
-    document.getElementById("result").innerHTML =
-        "✅ Tesseract Loaded";
-}
+let output = "";
+
+output += "PDF.js: " +
+    (typeof pdfjsLib !== "undefined" ? "Loaded ✅" : "Failed ❌")
+    + "<br>";
+
+output += "Tesseract: " +
+    (typeof Tesseract !== "undefined" ? "Loaded ✅" : "Failed ❌");
+
+document.getElementById("result").innerHTML = output;
+
+console.log("pdfjsLib =", typeof pdfjsLib);
+console.log("Tesseract =", typeof Tesseract);
 
 </script>
 
