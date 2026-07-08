@@ -1,31 +1,198 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>PDF Test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>DR PDF Processor</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
+<style>
+body{
+    font-family:Arial,sans-serif;
+    padding:30px;
+    background:#f5f5f5;
+}
+
+#dropZone{
+    height:250px;
+    border:3px dashed #0078d7;
+    border-radius:10px;
+    background:#fff;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:22px;
+    cursor:pointer;
+}
+
+#dropZone.dragover{
+    background:#e8f3ff;
+}
+
+#status{
+    margin-top:20px;
+    background:white;
+    padding:20px;
+    border-radius:10px;
+}
+</style>
 </head>
+
 <body>
 
-<h1>PDF Test</h1>
+<h2>DR PDF Processor</h2>
 
-<div id="result"></div>
+<div id="dropZone">
+    Drag & Drop PDF Files Here
+</div>
+
+<div id="status">
+    Waiting for PDF...
+</div>
 
 <script>
 
-window.onload = function() {
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    const result = document.getElementById("result");
+const dropZone = document.getElementById("dropZone");
+const statusDiv = document.getElementById("status");
 
-    if (typeof pdfjsLib !== "undefined") {
-        result.innerHTML = "✅ PDF.js Loaded";
-    } else {
-        result.innerHTML = "❌ PDF.js Not Loaded";
+dropZone.addEventListener("dragover", (e)=>{
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+});
+
+dropZone.addEventListener("dragleave", ()=>{
+    dropZone.classList.remove("dragover");
+});
+
+dropZone.addEventListener("drop", async (e)=>{
+
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+
+    const files = e.dataTransfer.files;
+
+    for(const file of files){
+
+        if(file.type !== "application/pdf"){
+            statusDiv.innerHTML +=
+            "<br>❌ Not a PDF: " + file.name;
+            continue;
+        }
+
+        await processPDF(file);
     }
 
-};
+});
+
+async function processPDF(file){
+
+    try{
+
+        statusDiv.innerHTML +=
+        "<br>📄 Reading: " + file.name;
+
+        const buffer = await file.arrayBuffer();
+
+        const pdf = await pdfjsLib.getDocument({
+            data: buffer
+        }).promise;
+
+        let text = "";
+
+        for(let page=1; page<=pdf.numPages; page++){
+
+            const pdfPage = await pdf.getPage(page);
+
+            const content =
+                await pdfPage.getTextContent();
+
+            text += content.items
+                .map(item => item.str)
+                .join(" ");
+
+            text += "\n";
+        }
+
+        console.log("===== PDF TEXT =====");
+        console.log(text);
+
+        const patterns = [
+
+            /DR\s*No\.?\s*[:\-]?\s*(\d+)/i,
+            /DR#\s*(\d+)/i,
+            /Delivery\s*Receipt\s*No\.?\s*[:\-]?\s*(\d+)/i,
+            /\b(5\d{10})\b/
+
+        ];
+
+        let drNumber = null;
+
+        for(const pattern of patterns){
+
+            const match = text.match(pattern);
+
+            if(match){
+                drNumber = match[1];
+                break;
+            }
+
+        }
+
+        if(!drNumber){
+
+            statusDiv.innerHTML +=
+            "<br>❌ DR Number Not Found: "
+            + file.name;
+
+            return;
+        }
+
+        const blob =
+            new Blob(
+                [buffer],
+                {type:"application/pdf"}
+            );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const a =
+            document.createElement("a");
+
+        a.href = url;
+        a.download = drNumber + ".pdf";
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        document.body.removeChild(a);
+
+        URL.revokeObjectURL(url);
+
+        statusDiv.innerHTML +=
+        "<br>✅ Downloaded: "
+        + drNumber +
+        ".pdf";
+
+    }
+    catch(err){
+
+        console.error(err);
+
+        statusDiv.innerHTML +=
+        "<br>❌ Error: "
+        + file.name +
+        " → "
+        + err.message;
+
+    }
+}
 
 </script>
 
