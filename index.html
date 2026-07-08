@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>Library Test</title>
+<meta charset="UTF-8">
+<title>Library Test</title>
 
-    https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 </head>
 <body>
@@ -16,19 +16,12 @@
 
 <script>
 
-let output = "";
+document.getElementById("result").innerHTML =
+"PDF.js = " + typeof pdfjsLib +
+"<br>Tesseract = " + typeof Tesseract;
 
-output += "PDF.js: " +
-    (typeof pdfjsLib !== "undefined" ? "Loaded ✅" : "Failed ❌")
-    + "<br>";
-
-output += "Tesseract: " +
-    (typeof Tesseract !== "undefined" ? "Loaded ✅" : "Failed ❌");
-
-document.getElementById("result").innerHTML = output;
-
-console.log("pdfjsLib =", typeof pdfjsLib);
-console.log("Tesseract =", typeof Tesseract);
+console.log("PDF.js:", typeof pdfjsLib);
+console.log("Tesseract:", typeof Tesseract);
 
 </script>
 
