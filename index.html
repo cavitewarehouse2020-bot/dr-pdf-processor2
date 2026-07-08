@@ -13,11 +13,15 @@ body{
     background:#f5f5f5;
 }
 
+h2{
+    text-align:center;
+}
+
 #dropZone{
     height:250px;
     border:3px dashed #0078d7;
     border-radius:10px;
-    background:#fff;
+    background:white;
     display:flex;
     justify-content:center;
     align-items:center;
@@ -38,6 +42,7 @@ body{
 }
 </style>
 </head>
+
 <body>
 
 <h2>DR PDF Processor</h2>
@@ -53,21 +58,21 @@ body{
 <script>
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const dropZone = document.getElementById("dropZone");
 const statusDiv = document.getElementById("status");
 
-dropZone.addEventListener("dragover", (e)=>{
+dropZone.addEventListener("dragover", function(e){
     e.preventDefault();
     dropZone.classList.add("dragover");
 });
 
-dropZone.addEventListener("dragleave", ()=>{
+dropZone.addEventListener("dragleave", function(){
     dropZone.classList.remove("dragover");
 });
 
-dropZone.addEventListener("drop", async (e)=>{
+dropZone.addEventListener("drop", async function(e){
 
     e.preventDefault();
     dropZone.classList.remove("dragover");
@@ -77,19 +82,24 @@ dropZone.addEventListener("drop", async (e)=>{
     for(const file of files){
 
         if(file.type !== "application/pdf"){
-            statusDiv.innerHTML += "\n❌ Not a PDF: " + file.name;
+
+            statusDiv.innerHTML +=
+            "\n❌ Not a PDF: " + file.name;
+
             continue;
         }
 
         await processPDF(file);
     }
+
 });
 
 async function processPDF(file){
 
     try{
 
-        statusDiv.innerHTML += "\n📄 Reading: " + file.name;
+        statusDiv.innerHTML +=
+        "\n📄 Reading: " + file.name;
 
         const buffer = await file.arrayBuffer();
 
@@ -101,9 +111,11 @@ async function processPDF(file){
 
         for(let page = 1; page <= pdf.numPages; page++){
 
-            const pdfPage = await pdf.getPage(page);
+            const currentPage =
+                await pdf.getPage(page);
 
-            const content = await pdfPage.getTextContent();
+            const content =
+                await currentPage.getTextContent();
 
             text += content.items
                 .map(item => item.str)
@@ -112,32 +124,45 @@ async function processPDF(file){
             text += "\n";
         }
 
+        console.log("PDF TEXT:");
         console.log(text);
 
         let drNumber = null;
 
-        // Main pattern
-        let match = text.match(/DR\s*No[\s\S]{0,30}?(\d{10,})/i);
+        // Find "DR No" first
+        const drMatch =
+            text.match(/DR\s*No[\s\S]{0,50}?(\d{10,})/i);
 
-        if(match){
-            drNumber = match[1];
+        if(drMatch){
+            drNumber = drMatch[1];
         }
 
-        // Fallback for Eagle Cement DRs
+        // Fallback: first long number starting with 5
         if(!drNumber){
 
-            const allNumbers =
-                text.match(/\b\d{10,}\b/g);
+            const numbers =
+                text.match(/\d{10,}/g);
 
-            if(allNumbers && allNumbers.length){
-                drNumber = allNumbers[0];
+            if(numbers){
+
+                const found =
+                    numbers.find(x => x.startsWith("5"));
+
+                if(found){
+                    drNumber = found;
+                }
             }
         }
 
         if(!drNumber){
 
             statusDiv.innerHTML +=
-                "\n❌ DR Number Not Found: " + file.name;
+            "\n❌ DR Number Not Found: " +
+            file.name;
+
+            statusDiv.innerHTML +=
+            "\n\nExtracted Text:\n" +
+            text.substring(0,2000);
 
             return;
         }
@@ -147,9 +172,11 @@ async function processPDF(file){
             {type:"application/pdf"}
         );
 
-        const url = URL.createObjectURL(blob);
+        const url =
+            URL.createObjectURL(blob);
 
-        const link = document.createElement("a");
+        const link =
+            document.createElement("a");
 
         link.href = url;
         link.download = drNumber + ".pdf";
@@ -161,15 +188,18 @@ async function processPDF(file){
         URL.revokeObjectURL(url);
 
         statusDiv.innerHTML +=
-            "\n✅ Downloaded: " + drNumber + ".pdf";
+        "\n✅ Downloaded: " +
+        drNumber +
+        ".pdf";
 
     }
-    catch(err){
+    catch(error){
 
-        console.error(err);
+        console.error(error);
 
         statusDiv.innerHTML +=
-            "\n❌ Error: " + err.message;
+        "\n❌ Error: " +
+        error.message;
     }
 }
 
