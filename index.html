@@ -2,90 +2,111 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>DR PDF Processor</title>
+<title>DR OCR PDF Processor</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.jsscript>
 
 <style>
-body{
+body {
     font-family: Arial, sans-serif;
-    padding:30px;
-    background:#f5f5f5;
+    background: #f5f5f5;
+    padding: 30px;
 }
 
-h2{
-    text-align:center;
+h2 {
+    text-align: center;
 }
 
-#dropZone{
-    height:250px;
-    border:3px dashed #0078d7;
-    border-radius:10px;
-    background:#fff;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    font-size:22px;
-    cursor:pointer;
+#dropZone {
+    height: 260px;
+    border: 3px dashed #0078d7;
+    border-radius: 12px;
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 22px;
+    cursor: pointer;
 }
 
-#dropZone.dragover{
-    background:#e8f3ff;
+#dropZone.dragover {
+    background: #e8f3ff;
 }
 
-#status{
-    margin-top:20px;
-    background:white;
-    padding:20px;
-    border-radius:10px;
-    white-space:pre-wrap;
+#status {
+    margin-top: 20px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    white-space: pre-wrap;
     font-family: Consolas, monospace;
+    font-size: 14px;
+}
+
+.success {
+    color: green;
+}
+
+.error {
+    color: red;
 }
 </style>
 </head>
 
 <body>
 
-<h2>DR PDF Processor</h2>
+<h2>DR OCR PDF Processor</h2>
 
 <div id="dropZone">
     Drag & Drop PDF Files Here
 </div>
 
-<div id="status">
-    Waiting for PDF...
-</div>
+<div id="status">Waiting for PDF...</div>
 
 <script>
-
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const dropZone = document.getElementById('dropZone');
-const statusDiv = document.getElementById('status');
+const dropZone = document.getElementById("dropZone");
+const statusDiv = document.getElementById("status");
 
-dropZone.addEventListener('dragover', (e)=>{
+window.onload = function () {
+    statusDiv.innerHTML =
+        "PDF.js: " + typeof pdfjsLib +
+        "\nTesseract: " + typeof Tesseract +
+        "\n\nWaiting for PDF...";
+};
+
+dropZone.addEventListener("dragover", function(e) {
     e.preventDefault();
-    dropZone.classList.add('dragover');
+    dropZone.classList.add("dragover");
 });
 
-dropZone.addEventListener('dragleave', ()=>{
-    dropZone.classList.remove('dragover');
+dropZone.addEventListener("dragleave", function() {
+    dropZone.classList.remove("dragover");
 });
 
-dropZone.addEventListener('drop', async (e)=>{
-
+dropZone.addEventListener("drop", async function(e) {
     e.preventDefault();
-    dropZone.classList.remove('dragover');
+    dropZone.classList.remove("dragover");
 
     const files = e.dataTransfer.files;
 
-    for(const file of files){
+    if (files.length === 0) {
+        return;
+    }
 
-        if(file.type !== 'application/pdf'){
-            statusDiv.innerHTML += '\n❌ Not PDF: ' + file.name;
+    statusDiv.innerHTML =
+        "PDF.js: " + typeof pdfjsLib +
+        "\nTesseract: " + typeof Tesseract +
+        "\n\nProcessing " + files.length + " file(s)...\n";
+
+    for (const file of files) {
+        if (file.type !== "application/pdf") {
+            statusDiv.innerHTML += "\n❌ Not a PDF: " + file.name;
             continue;
         }
 
@@ -93,11 +114,9 @@ dropZone.addEventListener('drop', async (e)=>{
     }
 });
 
-async function processPDF(file){
-
-    try{
-
-        statusDiv.innerHTML += '\n📄 Reading: ' + file.name;
+async function processPDF(file) {
+    try {
+        statusDiv.innerHTML += "\n\n📄 Processing: " + file.name;
 
         const buffer = await file.arrayBuffer();
 
@@ -105,110 +124,133 @@ async function processPDF(file){
             data: buffer
         }).promise;
 
-        let fullText = '';
+        let fullText = "";
 
-        for(let p=1; p<=pdf.numPages; p++){
+        for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+            statusDiv.innerHTML += "\n🔍 OCR Page " + pageNo + " of " + pdf.numPages;
 
-            const page = await pdf.getPage(p);
+            const page = await pdf.getPage(pageNo);
 
-            const content =
-                await page.getTextContent();
+            const viewport = page.getViewport({
+                scale: 2.5
+            });
 
-            statusDiv.innerHTML +=
-                '\nPage ' + p +
-                ' Items: ' +
-                content.items.length;
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
 
-            const pageText =
-                content.items
-                    .map(item => item.str || '')
-                    .join(' ');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
 
-            fullText += pageText + '\n';
+            await page.render({
+                canvasContext: context,
+                viewport: viewport
+            }).promise;
+
+            const result = await Tesseract.recognize(
+                canvas,
+                "eng",
+                {
+                    logger: function(m) {
+                        if (m.status === "recognizing text") {
+                            const percent = Math.round(m.progress * 100);
+                            console.log("OCR Page " + pageNo + ": " + percent + "%");
+                        }
+                    }
+                }
+            );
+
+            fullText += "\n" + result.data.text;
         }
 
+        console.log("===== OCR TEXT =====");
         console.log(fullText);
 
-        let drNumber = null;
+        const drNumber = extractDRNumber(fullText);
 
-        const match =
-            fullText.match(/DR\s*No[\s\S]{0,50}?(\d{10,})/i);
-
-        if(match){
-            drNumber = match[1];
-        }
-
-        if(!drNumber){
-
-            const allNumbers =
-                fullText.match(/\d{10,}/g);
-
-            if(allNumbers){
-
-                const dr =
-                    allNumbers.find(x =>
-                        x.startsWith('500')
-                    );
-
-                if(dr){
-                    drNumber = dr;
-                }
-            }
-        }
-
-        if(!drNumber){
-
-            statusDiv.innerHTML +=
-                '\n❌ DR Number Not Found';
-
-            statusDiv.innerHTML +=
-                '\n\n===== EXTRACTED TEXT =====\n';
-
-            statusDiv.innerHTML +=
-                fullText.substring(0,5000);
-
+        if (!drNumber) {
+            statusDiv.innerHTML += "\n❌ DR Number Not Found: " + file.name;
+            statusDiv.innerHTML += "\n\n===== OCR TEXT PREVIEW =====\n";
+            statusDiv.innerHTML += fullText.substring(0, 3000);
             return;
         }
 
-        const blob =
-            new Blob(
-                [buffer],
-                {type:'application/pdf'}
-            );
-
-        const url =
-            URL.createObjectURL(blob);
-
-        const link =
-            document.createElement('a');
-
-        link.href = url;
-        link.download =
-            drNumber + '.pdf';
-
-        document.body.appendChild(link);
-
-        link.click();
-
-        document.body.removeChild(link);
-
-        URL.revokeObjectURL(url);
+        downloadRenamedPDF(buffer, drNumber + ".pdf");
 
         statusDiv.innerHTML +=
-            '\n✅ Downloaded: ' +
-            drNumber +
-            '.pdf';
-    }
-    catch(error){
+            "\n✅ " + file.name + " → " + drNumber + ".pdf";
 
+    } catch (error) {
         console.error(error);
 
         statusDiv.innerHTML +=
-            '\n❌ Error: ' +
-            error.message;
+            "\n❌ Error processing " + file.name + ": " + error.message;
     }
 }
 
+function extractDRNumber(text) {
+    const cleanText = text.replace(/\s+/g, " ");
+
+    let match = cleanText.match(/D\s*R\s*(?:No|NO|N0|Number|#)?[\s.:#-]{0,10}([0-9][0-9\s-]{7,20})/i);
+
+    if (match) {
+        const digits = match[1].replace(/\D/g, "");
+
+        if (digits.length >= 8) {
+            return digits;
+        }
+    }
+
+    match = cleanText.match(/DR[\s\S]{0,80}?([0-9][0-9\s-]{7,20})/i);
+
+    if (match) {
+        const digits = match[1].replace(/\D/g, "");
+
+        if (digits.length >= 8) {
+            return digits;
+        }
+    }
+
+    const possibleNumbers = cleanText.match(/[0-9][0-9\s-]{7,20}[0-9]/g);
+
+    if (possibleNumbers) {
+        const cleanedNumbers = possibleNumbers
+            .map(n => n.replace(/\D/g, ""))
+            .filter(n => n.length >= 8);
+
+        const startsWith500 = cleanedNumbers.find(n => n.startsWith("500"));
+
+        if (startsWith500) {
+            return startsWith500;
+        }
+
+        if (cleanedNumbers.length > 0) {
+            return cleanedNumbers[0];
+        }
+    }
+
+    return null;
+}
+
+function downloadRenamedPDF(buffer, fileName) {
+    const blob = new Blob(
+        [buffer],
+        {
+            type: "application/pdf"
+        }
+    );
+
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+}
 </script>
 
 </body>
