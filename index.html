@@ -1,27 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
+<title>PDF Test</title>
 
-<title>DR PDF Processor</title>
-
-.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 </head>
 <body>
 
-<div id="status">Loading...</div>
+<h1>PDF Test</h1>
+
+<div id="result"></div>
 
 <script>
-
-if (typeof pdfjsLib === "undefined") {
-  document.getElementById("status").innerHTML =
-    "❌ PDF.js NOT Loaded";
+if (typeof pdfjsLib !== "undefined") {
+    document.getElementById("result").innerHTML =
+        "✅ PDF.js Loaded";
 } else {
-  document.getElementById("status").innerHTML =
-    "✅ PDF.js Loaded";
+    document.getElementById("result").innerHTML =
+        "❌ PDF.js NOT Loaded";
 }
-
 </script>
 
 </body>
