@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>PDF Test</title>
 
-<script src="httpsjs"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 </head>
 <body>
@@ -15,10 +15,17 @@
 
 <script>
 
-document.getElementById("result").innerHTML =
-"pdfjsLib = " + typeof pdfjsLib;
+window.onload = function() {
 
-console.log("pdfjsLib =", typeof pdfjsLib);
+    const result = document.getElementById("result");
+
+    if (typeof pdfjsLib !== "undefined") {
+        result.innerHTML = "✅ PDF.js Loaded";
+    } else {
+        result.innerHTML = "❌ PDF.js Not Loaded";
+    }
+
+};
 
 </script>
 
