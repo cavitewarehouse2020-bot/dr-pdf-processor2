@@ -2,214 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <title>DR PDF Processor</title>
 
-/3.11.174/pdf.min.js"></script>
+.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
-<style>
-body{
-    font-family:Arial,sans-serif;
-    background:#f5f5f5;
-    padding:30px;
-}
-
-h2{
-    text-align:center;
-}
-
-#dropZone{
-    height:250px;
-    border:3px dashed #0078d7;
-    border-radius:12px;
-    background:white;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    font-size:22px;
-    cursor:pointer;
-}
-
-#dropZone.dragover{
-    background:#e8f3ff;
-}
-
-#status{
-    margin-top:20px;
-    background:white;
-    padding:20px;
-    border-radius:10px;
-    white-space:pre-wrap;
-}
-</style>
 </head>
 <body>
 
-<h2>DR PDF Processor</h2>
-
-<div id="dropZone">
-    Drag & Drop PDF Files Here
-</div>
-
-<div id="status">
-    Waiting for PDF...
-</div>
+<div id="status">Loading...</div>
 
 <script>
 
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-const dropZone = document.getElementById("dropZone");
-const statusDiv = document.getElementById("status");
-
-dropZone.addEventListener("dragover", (e)=>{
-    e.preventDefault();
-    dropZone.classList.add("dragover");
-});
-
-dropZone.addEventListener("dragleave", ()=>{
-    dropZone.classList.remove("dragover");
-});
-
-dropZone.addEventListener("drop", async (e)=>{
-
-    e.preventDefault();
-    dropZone.classList.remove("dragover");
-
-    const files = e.dataTransfer.files;
-
-    for(const file of files){
-
-        if(file.type !== "application/pdf"){
-
-            statusDiv.innerHTML +=
-            "\n❌ Not a PDF: " + file.name;
-
-            continue;
-        }
-
-        await processPDF(file);
-
-    }
-
-});
-
-async function processPDF(file){
-
-    try{
-
-        statusDiv.innerHTML +=
-        "\n📄 Reading: " + file.name;
-
-        const buffer =
-        await file.arrayBuffer();
-
-        const pdf =
-        await pdfjsLib.getDocument({
-            data: buffer
-        }).promise;
-
-        let text = "";
-
-        for(let page=1; page<=pdf.numPages; page++){
-
-            const currentPage =
-            await pdf.getPage(page);
-
-            const content =
-            await currentPage.getTextContent();
-
-            const pageText =
-            content.items
-            .map(item => item.str)
-            .join(" ");
-
-            text += pageText + "\n";
-
-        }
-
-        console.log(text);
-
-        let drNumber = null;
-
-        const match =
-        text.match(/DR\s*No[\s\S]{0,20}?(\d{10,})/i);
-
-        if(match){
-
-            drNumber = match[1];
-
-        }
-
-        if(!drNumber){
-
-            const fallback =
-            text.match(/\b(\d{10,})\b/);
-
-            if(fallback){
-
-                drNumber = fallback[1];
-
-            }
-
-        }
-
-        if(!drNumber){
-
-            statusDiv.innerHTML +=
-            "\n❌ DR Number Not Found: " +
-            file.name;
-
-            console.log(text);
-
-            return;
-        }
-
-        const blob =
-        new Blob(
-            [buffer],
-            {type:"application/pdf"}
-        );
-
-        const url =
-        URL.createObjectURL(blob);
-
-        const link =
-        document.createElement("a");
-
-        link.href = url;
-        link.download = drNumber + ".pdf";
-
-        document.body.appendChild(link);
-
-        link.click();
-
-        document.body.removeChild(link);
-
-        URL.revokeObjectURL(url);
-
-        statusDiv.innerHTML +=
-        "\n✅ " +
-        file.name +
-        " → " +
-        drNumber +
-        ".pdf";
-
-    }
-    catch(error){
-
-        console.error(error);
-
-        statusDiv.innerHTML +=
-        "\n❌ " +
-        file.name +
-        " → " +
-        error.message;
-
-    }
-
+if (typeof pdfjsLib === "undefined") {
+  document.getElementById("status").innerHTML =
+    "❌ PDF.js NOT Loaded";
+} else {
+  document.getElementById("status").innerHTML =
+    "✅ PDF.js Loaded";
 }
 
 </script>
