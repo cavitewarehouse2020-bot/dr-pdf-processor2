@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Batch PDF DR Renamer</title>
+    <title>Batch PDF DR Renamer (Robust Edition)</title>
     <!-- Include Mozilla's PDF.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
@@ -74,7 +74,6 @@
             text-align: right;
         }
         /* Status Colors */
-        .status-pending { color: #888; border-left-color: #888; }
         .status-scanning { color: #007bff; border-left-color: #007bff; }
         .status-success { color: #28a745; border-left-color: #28a745; }
         .status-error { color: #dc3545; border-left-color: #dc3545; }
@@ -142,8 +141,36 @@
             fileListContainer.prepend(itemDiv);
         }
 
+        // Multi-Layered Intelligent Extraction Function
+        function findDRNumber(fullText) {
+            // Strategy 1: Standard continuous string (DR No followed by 10 digits)
+            let match = fullText.match(/DR\s*No[\s\.\:\-]*(\d{10})/i);
+            if (match) return match[1];
+
+            // Strategy 2: Format Proximity (Find any standalone 10-digit number starting with 5)
+            // Eagle Cement DRs follow a distinct pattern (e.g., 5001178516)
+            match = fullText.match(/\b(5\d{9})\b/);
+            if (match) return match[1];
+
+            // Strategy 3: Flipped/Upside-Down Parsing (Text extracted completely backward)
+            // If inverted, "DR No" becomes "oN RD" and "500..." ends with "5"
+            const reversedText = fullText.split('').reverse().join('');
+            match = reversedText.match(/(\d{9}5)[\s\.\:\-]*oN\s*RD/i);
+            if (match) return match[1].split('').reverse().join('');
+
+            // Strategy 4: Flipped Generic Bounding Box (Any 10-digit number ending with 5 when reversed)
+            match = reversedText.match(/\b(\d{9}5)\b/);
+            if (match) return match[1].split('').reverse().join('');
+
+            // Strategy 5: Extreme spacing compression (Strip all whitespaces entirely and search)
+            const compressedText = fullText.replace(/\s+/g, '');
+            match = compressedText.match(/DRNo.*?(\d{10})/i);
+            if (match) return match[1];
+
+            return null;
+        }
+
         async function addToListAndProcess(file) {
-            // 1. Create the UI element for this specific file
             const itemDiv = document.createElement('div');
             itemDiv.className = 'file-item status-scanning';
             
@@ -157,38 +184,28 @@
 
             itemDiv.appendChild(nameSpan);
             itemDiv.appendChild(statusSpan);
-            
-            // Add to the top of the list
             fileListContainer.prepend(itemDiv);
 
-            // 2. Process the PDF
             try {
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 
-                // Read text from the first page
+                // Extract text coordinates from Page 1
                 const page = await pdf.getPage(1);
                 const textContent = await page.getTextContent();
                 
                 const textItems = textContent.items.map(item => item.str.trim()).filter(str => str.length > 0);
                 const fullText = textItems.join(' ');
 
-                // Regex to find DR No
-                const regex = /DR\s*No[\s\.\:\-]*(\d+)/i;
-                const match = fullText.match(regex);
+                // Run through the intelligent extraction routine
+                const drNumber = findDRNumber(fullText);
 
-                if (match && match[1]) {
-                    const drNumber = match[1];
+                if (drNumber) {
                     const newFilename = `${drNumber}.pdf`;
-                    
-                    // Update UI on success
                     itemDiv.className = 'file-item status-success';
                     statusSpan.textContent = `Renamed to ${newFilename}`;
-                    
-                    // Trigger download
                     downloadFile(file, newFilename);
                 } else {
-                    // Update UI on failure to find DR No
                     itemDiv.className = 'file-item status-error';
                     statusSpan.textContent = 'DR No not found';
                 }
@@ -209,7 +226,6 @@
             document.body.appendChild(a);
             a.click();
             
-            // Cleanup
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
         }
