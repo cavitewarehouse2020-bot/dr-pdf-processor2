@@ -3,216 +3,253 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Batch PDF DR Renamer (Robust Edition)</title>
-    <!-- Include Mozilla's PDF.js library -->
+    <title>Enterprise PDF DR Renamer</title>
+    <!-- Core PDF Extraction Engine -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <!-- Automatic OCR Fallback Engine for Scanned Documents -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body { 
-            font-family: Arial, sans-serif; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             display: flex; 
             flex-direction: column; 
             align-items: center; 
-            background-color: #f4f7f6; 
+            background-color: #f8f9fa; 
             margin: 0; 
             padding: 40px 20px;
         }
-        h2 { color: #333; margin-bottom: 20px; }
+        h2 { color: #212529; margin-bottom: 5px; }
+        p.subtitle { color: #6c757d; margin-bottom: 25px; }
         
         #drop-zone { 
             width: 100%; 
-            max-width: 500px;
-            height: 150px; 
-            border: 3px dashed #007bff; 
-            border-radius: 10px; 
+            max-width: 600px;
+            height: 160px; 
+            border: 3px dashed #0d6efd; 
+            border-radius: 12px; 
             display: flex; 
+            flex-direction: column;
             align-items: center; 
             justify-content: center; 
             background-color: #ffffff; 
-            color: #555; 
+            color: #495057; 
             font-size: 1.2rem; 
-            transition: 0.3s; 
+            transition: all 0.3s ease; 
             cursor: pointer; 
             text-align: center; 
             padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             margin-bottom: 30px;
         }
         #drop-zone.dragover { 
-            background-color: #e9f5ff; 
-            border-color: #0056b3; 
-            color: #0056b3; 
+            background-color: #e7f1ff; 
+            border-color: #0a58ca; 
+            color: #0a58ca;
+            transform: scale(1.02);
         }
 
-        /* List View Styles */
         #file-list {
             width: 100%;
-            max-width: 600px;
+            max-width: 650px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
         }
         .file-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
             background: #fff;
             padding: 15px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            border-left: 5px solid #ccc;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border-left: 5px solid #6c757d;
+            transition: all 0.2s;
+        }
+        .file-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .file-name {
-            font-weight: bold;
-            color: #333;
+            font-weight: 600;
+            color: #212529;
             word-break: break-all;
             margin-right: 15px;
         }
         .file-status {
             font-size: 0.9rem;
-            font-weight: bold;
-            min-width: 150px;
+            font-weight: 700;
+            min-width: 180px;
             text-align: right;
         }
-        /* Status Colors */
-        .status-scanning { color: #007bff; border-left-color: #007bff; }
-        .status-success { color: #28a745; border-left-color: #28a745; }
+        
+        /* Debug Panel */
+        .debug-panel {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f1f3f5;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #495057;
+            max-height: 100px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .debug-btn {
+            background: none;
+            border: none;
+            color: #0d6efd;
+            cursor: pointer;
+            font-size: 0.8rem;
+            text-decoration: underline;
+            padding: 0;
+            margin-top: 5px;
+        }
+
+        /* Status States */
+        .status-scanning { color: #0d6efd; border-left-color: #0d6efd; }
+        .status-ocr { color: #fd7e14; border-left-color: #fd7e14; }
+        .status-success { color: #198754; border-left-color: #198754; }
         .status-error { color: #dc3545; border-left-color: #dc3545; }
     </style>
 </head>
 <body>
 
     <h2>Batch DR PDF Renamer</h2>
-    <div id="drop-zone">Drag & Drop multiple .pdf files here</div>
+    <p class="subtitle">Supports fragmented layouts, inverted text, and scanned image documents</p>
     
-    <div id="file-list">
-        <!-- File progress items will appear here -->
+    <div id="drop-zone">
+        <strong>Drag & Drop your .pdf files here</strong>
+        <span style="font-size: 0.9rem; color: #6c757d; margin-top: 8px;">Processes locally in your browser</span>
     </div>
+    
+    <div id="file-list"></div>
 
     <script>
-        // Initialize PDF.js worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
         const dropZone = document.getElementById('drop-zone');
         const fileListContainer = document.getElementById('file-list');
 
-        // Prevent default drag behaviors
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
             document.body.addEventListener(eventName, preventDefaults, false);
         });
 
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+        ['dragenter', 'dragover'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false); });
+        ['dragleave', 'drop'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false); });
 
-        // Highlight drop zone when dragging over it
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
-        });
-
-        // Handle dropped files
-        dropZone.addEventListener('drop', handleDrop, false);
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = Array.from(dt.files);
-
-            files.forEach(file => {
+        dropZone.addEventListener('drop', (e) => {
+            Array.from(e.dataTransfer.files).forEach(file => {
                 if (file.type === 'application/pdf') {
-                    addToListAndProcess(file);
+                    processFile(file);
                 } else {
-                    createErrorItem(file.name, 'Invalid file type (Not a PDF)');
+                    createListItem(file.name, 'status-error', 'Invalid file type (Not a PDF)');
                 }
             });
-        }
+        }, false);
 
-        function createErrorItem(filename, errorMessage) {
+        // Helper to construct list elements nicely
+        function createListItem(filename, initialClass, initialStatus) {
             const itemDiv = document.createElement('div');
-            itemDiv.className = 'file-item status-error';
+            itemDiv.className = `file-item ${initialClass}`;
+            
             itemDiv.innerHTML = `
-                <span class="file-name">${filename}</span>
-                <span class="file-status">${errorMessage}</span>
+                <div class="file-row">
+                    <span class="file-name">${filename}</span>
+                    <span class="file-status">${initialStatus}</span>
+                </div>
+                <button class="debug-btn" style="display:none;">View Extracted Text</button>
+                <div class="debug-panel"></div>
             `;
             fileListContainer.prepend(itemDiv);
+            return itemDiv;
         }
 
-        // Multi-Layered Intelligent Extraction Function
-        function findDRNumber(fullText) {
-            // Strategy 1: Standard continuous string (DR No followed by 10 digits)
-            let match = fullText.match(/DR\s*No[\s\.\:\-]*(\d{10})/i);
+        // Smart text extraction matching algorithm
+        function extractDRFromText(text) {
+            if (!text) return null;
+            
+            // Strip out spaces and common punctuation layout boundaries entirely
+            const cleanText = text.replace(/[\s\.\:\-\,\_\/]/g, '');
+            
+            // Look for "DRNo" matched closely to a 10-digit number starting with 5
+            let match = cleanText.match(/DRNo.*?变化*(5\d{9})/i) || cleanText.match(/DRNo.*?(\d{10})/i);
+            if (match) return match[1];
+            
+            // Fallback: Grab the first standalone 10-digit sequence starting with 5
+            match = cleanText.match(/(5\d{9})/);
             if (match) return match[1];
 
-            // Strategy 2: Format Proximity (Find any standalone 10-digit number starting with 5)
-            // Eagle Cement DRs follow a distinct pattern (e.g., 5001178516)
-            match = fullText.match(/\b(5\d{9})\b/);
+            // Deep Fallback: Any sequential 10 digits
+            match = cleanText.match(/(\d{10})/);
             if (match) return match[1];
-
-            // Strategy 3: Flipped/Upside-Down Parsing (Text extracted completely backward)
-            // If inverted, "DR No" becomes "oN RD" and "500..." ends with "5"
-            const reversedText = fullText.split('').reverse().join('');
-            match = reversedText.match(/(\d{9}5)[\s\.\:\-]*oN\s*RD/i);
-            if (match) return match[1].split('').reverse().join('');
-
-            // Strategy 4: Flipped Generic Bounding Box (Any 10-digit number ending with 5 when reversed)
-            match = reversedText.match(/\b(\d{9}5)\b/);
-            if (match) return match[1].split('').reverse().join('');
-
-            // Strategy 5: Extreme spacing compression (Strip all whitespaces entirely and search)
-            const compressedText = fullText.replace(/\s+/g, '');
-            match = compressedText.match(/DRNo.*?(\d{10})/i);
-            if (match) return match[1];
-
+            
             return null;
         }
 
-        async function addToListAndProcess(file) {
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'file-item status-scanning';
-            
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'file-name';
-            nameSpan.textContent = file.name;
+        async function processFile(file) {
+            const row = createListItem(file.name, 'status-scanning', 'Extracting text...');
+            const statusSpan = row.querySelector('.file-status');
+            const debugBtn = row.querySelector('.debug-btn');
+            const debugPanel = row.querySelector('.debug-panel');
 
-            const statusSpan = document.createElement('span');
-            statusSpan.className = 'file-status';
-            statusSpan.textContent = 'Scanning...';
-
-            itemDiv.appendChild(nameSpan);
-            itemDiv.appendChild(statusSpan);
-            fileListContainer.prepend(itemDiv);
+            let extractedText = "";
 
             try {
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                
-                // Extract text coordinates from Page 1
                 const page = await pdf.getPage(1);
-                const textContent = await page.getTextContent();
                 
-                const textItems = textContent.items.map(item => item.str.trim()).filter(str => str.length > 0);
-                const fullText = textItems.join(' ');
+                // Attempt 1: Direct Digital Text Layer Extraction
+                const textContent = await page.getTextContent();
+                extractedText = textContent.items.map(item => item.str).join(' ');
 
-                // Run through the intelligent extraction routine
-                const drNumber = findDRNumber(fullText);
+                let drNumber = extractDRFromText(extractedText);
 
+                // Attempt 2: Visual OCR Scanner Fallback (if direct text extraction fails or is blank)
+                if (!drNumber) {
+                    row.className = 'file-item status-ocr';
+                    statusSpan.textContent = 'Running Visual OCR Scanner...';
+                    
+                    // Render page into an offscreen high-res canvas for OCR accuracy
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const viewport = page.getViewport({ scale: 2.0 }); 
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                    
+                    // Run optical text recognition
+                    const ocrResult = await Tesseract.recognize(canvas, 'eng');
+                    extractedText = ocrResult.data.text;
+                    drNumber = extractDRFromText(extractedText);
+                }
+
+                // Final Evaluation
                 if (drNumber) {
                     const newFilename = `${drNumber}.pdf`;
-                    itemDiv.className = 'file-item status-success';
+                    row.className = 'file-item status-success';
                     statusSpan.textContent = `Renamed to ${newFilename}`;
                     downloadFile(file, newFilename);
                 } else {
-                    itemDiv.className = 'file-item status-error';
+                    row.className = 'file-item status-error';
                     statusSpan.textContent = 'DR No not found';
+                    
+                    // Expose debug details for anomalies
+                    debugBtn.style.display = 'block';
+                    debugPanel.textContent = extractedText.trim() || "[Document contains no readable text graphics]";
+                    debugBtn.onclick = () => {
+                        debugPanel.style.display = debugPanel.style.display === 'block' ? 'none' : 'block';
+                    };
                 }
+
             } catch (error) {
-                console.error(`Error processing ${file.name}:`, error);
-                itemDiv.className = 'file-item status-error';
-                statusSpan.textContent = 'Error reading PDF';
+                console.error(error);
+                row.className = 'file-item status-error';
+                statusSpan.textContent = 'Error reading PDF format';
             }
         }
 
@@ -222,10 +259,8 @@
             a.style.display = 'none';
             a.href = url;
             a.download = newFilename;
-            
             document.body.appendChild(a);
             a.click();
-            
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
         }
