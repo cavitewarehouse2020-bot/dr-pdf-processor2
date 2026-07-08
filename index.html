@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise PDF DR Renamer</title>
+    <title>Eagle Cement DR Renamer</title>
     <!-- Core PDF Extraction Engine -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <!-- Automatic OCR Fallback Engine for Scanned Documents -->
@@ -81,7 +81,6 @@
             text-align: right;
         }
         
-        /* Debug Panel */
         .debug-panel {
             margin-top: 10px;
             padding: 10px;
@@ -90,7 +89,7 @@
             font-family: monospace;
             font-size: 0.8rem;
             color: #495057;
-            max-height: 100px;
+            max-height: 150px;
             overflow-y: auto;
             white-space: pre-wrap;
             display: none;
@@ -116,7 +115,7 @@
 <body>
 
     <h2>Batch DR PDF Renamer</h2>
-    <p class="subtitle">Supports fragmented layouts, inverted text, and scanned image documents</p>
+    <p class="subtitle">Strictly targeted to Eagle Cement 10-digit DR formats starting with 5</p>
     
     <div id="drop-zone">
         <strong>Drag & Drop your .pdf files here</strong>
@@ -150,7 +149,6 @@
             });
         }, false);
 
-        // Helper to construct list elements nicely
         function createListItem(filename, initialClass, initialStatus) {
             const itemDiv = document.createElement('div');
             itemDiv.className = `file-item ${initialClass}`;
@@ -167,26 +165,37 @@
             return itemDiv;
         }
 
-        // Smart text extraction matching algorithm
+        // Strict Eagle Cement Extraction Rules
         function extractDRFromText(text) {
             if (!text) return null;
             
-            // Strip out spaces and common punctuation layout boundaries entirely
+            // 1. Clean spaces/punctuation out for a combined sequence check
             const cleanText = text.replace(/[\s\.\:\-\,\_\/]/g, '');
             
-            // Look for "DRNo" matched closely to a 10-digit number starting with 5
-            let match = cleanText.match(/DRNo.*?变化*(5\d{9})/i) || cleanText.match(/DRNo.*?(\d{10})/i);
+            // Rule A: Look for "DRNo" specifically bound to a 10-digit number starting with 5
+            let match = cleanText.match(/DRNo.*?(5\d{9})/i);
             if (match) return match[1];
             
-            // Fallback: Grab the first standalone 10-digit sequence starting with 5
+            // Rule B: Look for any isolated 10-digit number starting with 5 in the original text structure
+            const originalMatches = text.match(/\b(5\d{9})\b/g);
+            if (originalMatches && originalMatches.length > 0) {
+                return originalMatches[0]; // Returns the first valid matching DR sequence found
+            }
+
+            // Rule C: If the text stream layout extracted completely reversed/upside down
+            const reversedText = text.split('').reverse().join('');
+            const cleanReversed = reversedText.replace(/[\s\.\:\-\,\_\/]/g, '');
+            let revMatch = cleanReversed.match(/(\d{9}5).*?oNRD/i) || cleanReversed.match(/(5\d{9})/);
+            if (revMatch) {
+                // Flip it back to normal orientation
+                return revMatch[1].split('').reverse().join('');
+            }
+
+            // Rule D: Final fallback check on compressed string layout for a 5XXXXXXXXX sequence
             match = cleanText.match(/(5\d{9})/);
             if (match) return match[1];
-
-            // Deep Fallback: Any sequential 10 digits
-            match = cleanText.match(/(\d{10})/);
-            if (match) return match[1];
             
-            return null;
+            return null; // Reject anything else to avoid false positives
         }
 
         async function processFile(file) {
@@ -208,27 +217,25 @@
 
                 let drNumber = extractDRFromText(extractedText);
 
-                // Attempt 2: Visual OCR Scanner Fallback (if direct text extraction fails or is blank)
+                // Attempt 2: Visual OCR Engine Fallback (If text matching fails or layout is flipped)
                 if (!drNumber) {
                     row.className = 'file-item status-ocr';
                     statusSpan.textContent = 'Running Visual OCR Scanner...';
                     
-                    // Render page into an offscreen high-res canvas for OCR accuracy
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
-                    const viewport = page.getViewport({ scale: 2.0 }); 
+                    const viewport = page.getViewport({ scale: 2.0 }); // High-res render for OCR precision
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
                     
                     await page.render({ canvasContext: ctx, viewport: viewport }).promise;
                     
-                    // Run optical text recognition
                     const ocrResult = await Tesseract.recognize(canvas, 'eng');
                     extractedText = ocrResult.data.text;
                     drNumber = extractDRFromText(extractedText);
                 }
 
-                // Final Evaluation
+                // Final UI Resolution
                 if (drNumber) {
                     const newFilename = `${drNumber}.pdf`;
                     row.className = 'file-item status-success';
@@ -238,9 +245,9 @@
                     row.className = 'file-item status-error';
                     statusSpan.textContent = 'DR No not found';
                     
-                    // Expose debug details for anomalies
+                    // Allow inspecting raw data if it can't find a valid match
                     debugBtn.style.display = 'block';
-                    debugPanel.textContent = extractedText.trim() || "[Document contains no readable text graphics]";
+                    debugPanel.textContent = extractedText.trim() || "[No text layers found on page]";
                     debugBtn.onclick = () => {
                         debugPanel.style.display = debugPanel.style.display === 'block' ? 'none' : 'block';
                     };
