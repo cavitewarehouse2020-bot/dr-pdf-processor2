@@ -1,47 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title>DR PDF Processor</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
 
 body{
-  font-family:Arial;
-  padding:40px;
+    font-family: Arial, sans-serif;
+    margin:40px;
+    background:#f5f5f5;
+}
+
+h2{
+    text-align:center;
 }
 
 #dropZone{
-  height:250px;
-  border:3px dashed #0078d7;
-  border-radius:10px;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  cursor:pointer;
-  font-size:20px;
+    height:250px;
+    border:3px dashed #0078d7;
+    border-radius:12px;
+    background:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:20px;
+    cursor:pointer;
+}
+
+#dropZone.dragover{
+    background:#e8f3ff;
 }
 
 #status{
-  margin-top:20px;
+    margin-top:20px;
+    background:white;
+    padding:20px;
+    border-radius:10px;
+}
+
+.success{
+    color:green;
+}
+
+.error{
+    color:red;
 }
 
 </style>
-
 </head>
 
 <body>
 
-<h2>DR PDF Processor</h2>
+<h2>DR Processor</h2>
 
 <div id="dropZone">
-  Drag One or More PDFs Here
+    Drag & Drop PDF / JPG / PNG Files Here
 </div>
 
-<div id="status"></div>
+<div id="status">
+    Waiting for files...
+</div>
 
 <script>
 
@@ -49,106 +73,221 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const dropZone = document.getElementById("dropZone");
-const status = document.getElementById("status");
+const statusDiv = document.getElementById("status");
 
-dropZone.addEventListener("dragover", function(e){
-  e.preventDefault();
+dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
 });
 
-dropZone.addEventListener("drop", async function(e){
+dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+});
 
-  e.preventDefault();
+dropZone.addEventListener("drop", async (e) => {
 
-  const files = e.dataTransfer.files;
+    e.preventDefault();
 
-  if(files.length === 0){
-    return;
-  }
+    dropZone.classList.remove("dragover");
 
-  status.innerHTML =
-    "<b>Processing " + files.length + " file(s)...</b><br><br>";
+    const files = e.dataTransfer.files;
 
-  for(const file of files){
+    if(files.length === 0){
+        return;
+    }
 
-    await processPDF(file);
+    statusDiv.innerHTML =
+        "<b>Processing " + files.length + " file(s)...</b><br><br>";
 
-  }
+    for(const file of files){
+
+        if(file.type === "application/pdf"){
+
+            await processPDF(file);
+
+        }else if(
+            file.type === "image/jpeg" ||
+            file.type === "image/jpg" ||
+            file.type === "image/png"
+        ){
+
+            await processImage(file);
+
+        }else{
+
+            statusDiv.innerHTML +=
+                "<span class='error'>❌ Unsupported File: "
+                + file.name +
+                "</span><br>";
+
+        }
+    }
 
 });
 
 async function processPDF(file){
 
-  try{
+    try{
 
-    const buffer = await file.arrayBuffer();
+        statusDiv.innerHTML +=
+            "📄 Reading PDF: " + file.name + "<br>";
 
-    const pdf = await pdfjsLib.getDocument({
-      data: buffer
-    }).promise;
+        const buffer =
+            await file.arrayBuffer();
 
-    let text = "";
+        const pdf =
+            await pdfjsLib.getDocument({
+                data: buffer
+            }).promise;
 
-    for(let page=1; page<=pdf.numPages; page++){
+        let text = "";
 
-      const currentPage =
-        await pdf.getPage(page);
+        for(let page = 1; page <= pdf.numPages; page++){
 
-      const content =
-        await currentPage.getTextContent();
+            const currentPage =
+                await pdf.getPage(page);
 
-      text += content.items
-        .map(item => item.str)
-        .join(" ");
+            const content =
+                await currentPage.getTextContent();
+
+            text += content.items
+                .map(item => item.str)
+                .join(" ");
+
+            text += "\n";
+
+        }
+
+        const match =
+            text.match(/DR\s*No\.?\s*[:\-]?\s*(\d+)/i);
+
+        if(!match){
+
+            statusDiv.innerHTML +=
+                "<span class='error'>❌ DR Number Not Found: "
+                + file.name +
+                "</span><br>";
+
+            return;
+        }
+
+        const drNo = match[1];
+
+        downloadFile(
+            file,
+            drNo + ".pdf"
+        );
+
+        statusDiv.innerHTML +=
+            "<span class='success'>✅ "
+            + file.name +
+            " → "
+            + drNo +
+            ".pdf</span><br>";
+
+    }
+    catch(error){
+
+        statusDiv.innerHTML +=
+            "<span class='error'>❌ "
+            + file.name +
+            " → "
+            + error.message +
+            "</span><br>";
+
+        console.error(error);
 
     }
 
-    const match =
-      text.match(/DR\s*No\.?\s*:?\s*(\d+)/i);
+}
 
-    if(!match){
+async function processImage(file){
 
-      status.innerHTML +=
-        "❌ " + file.name +
-        " - DR Number Not Found<br>";
+    try{
 
-      return;
+        statusDiv.innerHTML +=
+            "🖼 OCR Processing: "
+            + file.name +
+            "<br>";
+
+        const result =
+            await Tesseract.recognize(
+                file,
+                "eng"
+            );
+
+        const text =
+            result.data.text;
+
+        console.log(text);
+
+        const match =
+            text.match(/DR\s*No\.?\s*[:\-]?\s*(\d+)/i);
+
+        if(!match){
+
+            statusDiv.innerHTML +=
+                "<span class='error'>❌ DR Number Not Found: "
+                + file.name +
+                "</span><br>";
+
+            return;
+        }
+
+        const drNo =
+            match[1];
+
+        const extension =
+            file.name.split(".").pop();
+
+        downloadFile(
+            file,
+            drNo + "." + extension
+        );
+
+        statusDiv.innerHTML +=
+            "<span class='success'>✅ "
+            + file.name +
+            " → "
+            + drNo +
+            "." +
+            extension +
+            "</span><br>";
+
+    }
+    catch(error){
+
+        statusDiv.innerHTML +=
+            "<span class='error'>❌ "
+            + file.name +
+            " → "
+            + error.message +
+            "</span><br>";
+
+        console.error(error);
+
     }
 
-    const drNo = match[1];
+}
 
-    const blob =
-      new Blob([buffer],
-      {type:'application/pdf'});
+function downloadFile(file,newName){
+
+    const url =
+        URL.createObjectURL(file);
 
     const link =
-      document.createElement("a");
+        document.createElement("a");
 
-    link.href =
-      URL.createObjectURL(blob);
+    link.href = url;
+    link.download = newName;
 
-    link.download =
-      drNo + ".pdf";
+    document.body.appendChild(link);
 
     link.click();
 
-    status.innerHTML +=
-      "✅ " +
-      file.name +
-      " → " +
-      drNo +
-      ".pdf<br>";
+    document.body.removeChild(link);
 
-  }
-  catch(err){
-
-    status.innerHTML +=
-      "❌ " +
-      file.name +
-      " → " +
-      err.message +
-      "<br>";
-
-  }
+    URL.revokeObjectURL(url);
 
 }
 
