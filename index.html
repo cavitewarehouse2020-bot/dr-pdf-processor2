@@ -178,22 +178,28 @@
         }
 
         // Optimized Lightning-Fast Text Processor
+        // Optimized Lightning-Fast Text Processor
         function superFastExtractDR(text) {
             if (!text) return null;
             
-            // 1. Instantly check for a standard sequential 10-digit block starting with 5
-            let match = text.match(/\b(5\d{9})\b/);
-            if (match) return match[1];
+            // 1. Instantly check for the full format (e.g., EC/5000002125)
+            // Removes the slash entirely so the filename becomes EC5000002125.pdf
+            let match = text.match(/\b(EC\/5\d{9})\b/i);
+            if (match) return match[1].replace('/', '');
 
             // 2. Clear layouts strings to merge character-by-character structural gaps
-            const compressed = text.replace(/[\s\.\:\-\,\_\/]/g, '');
-            match = compressed.match(/DRNo.*?(5\d{9})/i) || compressed.match(/(5\d{9})/);
-            if (match) return match[1];
+            const compressed = text.replace(/[\s\.\:\-\,\_]/g, '');
+            match = compressed.match(/DRNo.*?(EC\/5\d{9})/i) || compressed.match(/(EC\/5\d{9})/i);
+            if (match) return match[1].replace('/', '');
 
             // 3. Reverse layout sweep (Handles 180-degree flipped text rendering streams instantly)
             const reversedCompressed = compressed.split('').reverse().join('');
-            match = reversedCompressed.match(/(5\d{9})/);
-            if (match) return match[1].split('').reverse().join('');
+            match = reversedCompressed.match(/(\d{10}\/CE)/i);
+            if (match) return match[1].split('').reverse().join('').replace('/', '');
+
+            // 4. Fallback: If it only finds the 10 digits without EC/, just return the digits
+            match = text.match(/\b(5\d{9})\b/);
+            if (match) return match[1];
 
             return null;
         }
